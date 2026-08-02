@@ -21,6 +21,8 @@ SQLite ledger — the **Relational Rooting Technique**.
 
 ## Architecture
 
+```bash 
+
 target query ──► orchestrator.py ──► target_id (UUID)
                         │
         ┌───────────────┼───────────────────┐
@@ -34,6 +36,7 @@ target query ──► orchestrator.py ──► target_id (UUID)
                         ▼
                  geointel.py ──► interactive map (HTML)
 
+```
 ## Installation
 
 ```bash
