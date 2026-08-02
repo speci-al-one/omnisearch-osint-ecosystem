@@ -27,7 +27,7 @@ class ImageTracker:
         console.print(f"\n[*] ImageTracker: analyzing {self.image_path}...")
         try:
             image = Image.open(self.image_path)
-            exif_data = image._getexif()
+            exif_data = image.getexif()
 
             if not exif_data:
                 console.print("[yellow][!] No EXIF metadata found in this image.[/yellow]")
