@@ -1,59 +1,70 @@
+"""Central database layer for the OmniSearch OSINT ecosystem.
+
+Every module writes to this single SQLite database, keyed by the same
+target_id (UUID) so all artifacts stay linked to one root entity.
+"""
+
 import sqlite3
 
-def init_db():
-    # Connects to the local SQLite database file (creates it if it doesn't exist)
-    conn = sqlite3.connect("core_db/osint_root.db")
-    cursor = conn.cursor()
-    
-    print("[*] Initializing Central OSINT Database Tables...")
+DB_PATH = "osint_root.db"
 
-    # 1. Main Targets Table (The Root of the Rooting Technique)
+
+def get_connection():
+    """Return a connection to the central database (creates the file)."""
+    return sqlite3.connect(DB_PATH)
+
+
+def init_db():
+    """Create all tables if they do not exist yet."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 1. Main targets table — the root of the rooting technique
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS targets (
         target_id TEXT PRIMARY KEY,
         input_query TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    
-    # 2. FastPeopleSearch Data Module Table
+
+    # 2. FastPeopleSearch data (name -> address / phone / relatives)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS fastpeoplesearch_data (
-        target_id TEXT NOT NULL,
-        full_name TEXT,
-        age TEXT,
-        current_phone TEXT,
-        current_address TEXT,
-        aliases TEXT,
-        relatives TEXT,
-        FOREIGN KEY (target_id) REFERENCES targets(target_id)
+        target_id TEXT, full_name TEXT, age TEXT, current_phone TEXT,
+        current_address TEXT, aliases TEXT, relatives TEXT
     )""")
-    
-    # 3. Whoxy Domain Data Module Table
+
+    # 3. Whoxy domain data (reverse WHOIS)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS whoxy_data (
-        target_id TEXT NOT NULL,
-        owned_domain TEXT,
-        registrar TEXT,
-        registrant_email TEXT,
-        FOREIGN KEY (target_id) REFERENCES targets(target_id)
+        target_id TEXT, owned_domain TEXT, registrar TEXT, registrant_email TEXT
     )""")
-    
-    # 4. IPLocation Network Data Module Table
+
+    # 4. IP location data
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS iplocation_data (
-        target_id TEXT NOT NULL,
-        ip_address TEXT,
-        country TEXT,
-        city TEXT,
-        isp TEXT,
-        vpn_proxy TEXT,
-        FOREIGN KEY (target_id) REFERENCES targets(target_id)
+        target_id TEXT, ip_address TEXT, country TEXT, city TEXT,
+        isp TEXT, vpn_proxy TEXT
     )""")
-    
+
+    # 5. Social media footprints
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS social_footprints (
+        target_id TEXT, platform_name TEXT, profile_url TEXT
+    )""")
+
+    # 6. Image metadata / EXIF
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS image_metadata (
+        target_id TEXT, image_path TEXT, camera_model TEXT,
+        capture_time TEXT, gps_coordinates TEXT
+    )""")
+
+    # 7. Data breach audit
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS cyber_leaks (
+        target_id TEXT, leak_source TEXT, breach_date TEXT, exposed_data TEXT
+    )""")
+
     conn.commit()
     conn.close()
-    print("[+] Database Architecture Built Successfully!")
-
-if __name__ == "__main__":
-    init_db()
-
