@@ -23,3 +23,17 @@ SQLite ledger — the **Relational Rooting Technique**.
 
 ```bash
 pip install -r requirements.txt
+
+# Architecture
+target query ──► orchestrator.py ──► target_id (UUID)
+                        │
+        ┌───────────────┼───────────────────┐
+        │               │                   │
+  socialhunter    imagetracker        cybertrace
+        │               │                   │
+        └───────────────┼───────────────────┘
+                        ▼
+                 osint_root.db (SQLite)
+                        │
+                        ▼
+                 geointel.py ──► interactive map (HTML)
