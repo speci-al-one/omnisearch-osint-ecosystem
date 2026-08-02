@@ -1,29 +1,25 @@
-# OmniSearch Integrated OSINT Ecosystem v1.0
+# OmniSearch Integrated OSINT Ecosystem
 
-A unified cyber reconnaissance and open-source intelligence (OSINT) pipeline built in Python. This framework demonstrates the **Relational Rooting Technique** by dynamically linking target artifacts across multiple structural modules using a central SQLite data ledger.
+A unified cyber-reconnaissance and OSINT pipeline that links all discovered
+artifacts about a target to a single root identifier (UUID) using one central
+SQLite ledger — the **Relational Rooting Technique**.
 
-## ⚡ Integrated Core Modules (5-in-1 Suite)
-1. **Core Ledger (Project 1):** FastPeopleSearch, IPLocation, and Whoxy data-broker tracking layer.
-2. **SocialHunter (Project 2):** High-speed multi-platform social media username checker with optimized query parameters.
-3. **ImageTracker (Project 3):** EXIF digital image forensic and metadata extraction engine.
-4. **GeoIntel Map (Project 4):** Automated geospatial visualization leveraging interactive Leaflet/Folium map rendering.
-5. **CyberTrace Hub (Project 5):** Corporate data breach and public credential exposure audit subsystem.
+## Modules
 
-## 🚀 Getting Started
+| # | Module | Purpose |
+|---|--------|---------|
+| 1 | `omnisearch.py` | Core ledger: FastPeopleSearch / Whoxy / IPLocation (demo) |
+| 2 | `socialhunter.py` | Cross-platform username availability checker |
+| 3 | `imagetracker.py` | EXIF + GPS metadata extraction from images |
+| 4 | `geointel.py` | Interactive Folium map of collected coordinates |
+| 5 | `cybertrace.py` | Data-breach audit (simulated, optional HIBP API) |
 
-### Prerequisites
-Install the required system dependency packages via pip:
+> **Note:** FastPeopleSearch, Whoxy and the breach audit run in clearly
+> labelled **demo mode** — paid APIs are replaced with sample records so the
+> full pipeline is runnable offline. The IP geolocation module uses the free
+> `ip-api.com` endpoint and performs real lookups.
+
+## Installation
+
 ```bash
-pip install rich requests pillow folium
-```
-
-### Running the Orchestrator
-Execute the core automation script from your terminal:
-```bash
-python complete_osint.py
-```
-
-## 🛠️ System Architecture (Data Flow Matrix)
-- **Central Storage:** Local relational `osint_root.db` utilizing UUID schema keys.
-- **Threading Model:** Lightweight defensive request parameters with micro-timeout configurations.
-
+pip install -r requirements.txt
