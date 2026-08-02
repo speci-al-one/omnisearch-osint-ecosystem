@@ -19,12 +19,8 @@ SQLite ledger — the **Relational Rooting Technique**.
 > full pipeline is runnable offline. The IP geolocation module uses the free
 > `ip-api.com` endpoint and performs real lookups.
 
-## Installation
+## Architecture
 
-```bash
-pip install -r requirements.txt
-
-# Architecture
 target query ──► orchestrator.py ──► target_id (UUID)
                         │
         ┌───────────────┼───────────────────┐
@@ -37,3 +33,8 @@ target query ──► orchestrator.py ──► target_id (UUID)
                         │
                         ▼
                  geointel.py ──► interactive map (HTML)
+
+## Installation
+
+```bash
+pip install -r requirements.txt
