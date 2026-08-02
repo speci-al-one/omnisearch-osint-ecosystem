@@ -4,6 +4,8 @@ import os
 import uuid
 import sqlite3
 from rich.console import Console
+import re
+from phoneintel import PhoneIntel
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -38,6 +40,16 @@ class GrandOSINTOrchestrator:
     def run_grand_pipeline(self, query, test_image="test.jpg"):
         """Execute the full 5-module chain under one root id."""
         self.console.clear()
+                def detect_query_type(query):
+            if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", query):
+                return "email"
+            if re.search(r"\+?\d[\d\s\-\(\)]{7,}", query):
+                return "phone"
+            return "name"
+
+        query_type = detect_query_type(query)
+        self.console.print(f"[bold cyan][*] Detected Input Type:[/bold cyan] [bold yellow]{query_type.upper()}[/bold yellow]")
+
         self.console.print(Panel.fit(
             "[bold cyan]⚡ OMNI-SEARCH INTEGRATED OSINT ECOSYSTEM v1.0 ⚡[/bold cyan]\n"
             "[bold white]Status: Systems Operational | Mode: Deep Relational Rooting[/bold white]",
