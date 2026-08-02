@@ -41,3 +41,11 @@ target query ──► orchestrator.py ──► target_id (UUID)
 
 ```bash
 pip install -r requirements.txt
+
+```
+## Usage
+
+Run the full 5-module pipeline:
+
+```bash
+python orchestrator.py
