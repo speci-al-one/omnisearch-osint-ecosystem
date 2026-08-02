@@ -23,7 +23,6 @@ class SocialHunter:
             "Twitch": f"https://twitch.tv{username}"
         }
         
-        }
         self.found_profiles = []
 
     def scan_username(self):
