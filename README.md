@@ -49,3 +49,17 @@ Run the full 5-module pipeline:
 
 ```bash
 python orchestrator.py
+```
+
+Or run a single module standalone:
+
+```bash
+python socialhunter.py
+python imagetracker.py
+python geointel.py
+python cybertrace.py
+python omnisearch.py
+```
+
+⚠️ **Ethical use:** For authorized security testing and OSINT research only. Use solely on assets you own or have explicit permission to test.
+
