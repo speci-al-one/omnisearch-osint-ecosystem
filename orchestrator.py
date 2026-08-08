@@ -95,6 +95,19 @@ class GrandOSINTOrchestrator:
             img_analyzer.save_to_database()
             progress.update(task3, description="[green][P3] EXIF metadata catalogued.[/green]")
 
+             # run_grand_pipeline() ichida, query_type == "face" bo'lganda:
+from facetracker import FaceTracker
+
+# detect_query_type() ga qo'shing:
+if os.path.exists(query) and query.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+    return "face"
+
+# P3.5 — FACE TRACKER (imagetracker'dan keyin):
+task35 = progress.add_task(description="[green][P3.5] Face-tracker: yuz mosliklari qidirilmoqda...[/green]", total=None)
+face_engine = FaceTracker(target_id=session_id, query_photo=query, image_dir="./corpus/")
+face_engine.scan()
+progress.update(task35, description="[green][P3.5] Yuz mosliklari bog'landi.[/green]")
+
             # --- PROJECT 5: CYBERTRACE HUB ---
             task5 = progress.add_task(description="[red][P5] Auditing data-breach repositories...[/red]", total=None)
             cyber_audit = CyberTraceHub(target_id=session_id, target_email=discovered_email)
