@@ -73,5 +73,22 @@ def init_db():
         location TEXT, carrier TEXT, line_type TEXT
     )""")
 
+    # 9. Face match data (face embeddings → image paths)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS face_matches (
+        target_id TEXT, image_path TEXT, score REAL,
+        camera_model TEXT, capture_time TEXT, gps_coordinates TEXT
+    )""")
+
+    # 10. Face embeddings cache (tezlik uchun — qayta hisoblamaslik)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS face_embeddings (
+        image_path TEXT PRIMARY KEY,
+        model_name TEXT,
+        embedding BLOB,
+        cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+
     conn.commit()
     conn.close()
+    
