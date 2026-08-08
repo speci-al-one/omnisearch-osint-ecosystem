@@ -1,11 +1,8 @@
-"""GrandOSINTOrchestrator — main entry point that chains all 5 modules."""
-
-import os
-import uuid
-import sqlite3
+"""GrandOSINTOrchestrator — Unified OSINT Pipeline (FIXED)"""
+import os, uuid, sqlite3, re, requests
+from pathlib import Path
 from rich.console import Console
-import re
-from phoneintel import PhoneIntel
+from rich.prompt import Prompt
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -17,120 +14,125 @@ from cybertrace import CyberTraceHub
 
 console = Console()
 
-
 class GrandOSINTOrchestrator:
     def __init__(self):
         init_db()
         self.console = console
 
-    def create_target_session(self, user_query):
-        """Create a unified root identifier for the target."""
-        target_uuid = f"OSINT-UUID-{str(uuid.uuid4())[:8].upper()}"
+    @staticmethod
+    def detect_query_type(query):
+        if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", query):
+            return "email"
+        if re.search(r"\+?\d[\d\s\-\(\)]{7,}", query):
+            return "phone"
+        return "name"
 
-        conn = sqlite3.connect("osint_root.db")
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO targets (target_id, input_query) VALUES (?, ?)",
-            (target_uuid, user_query),
-        )
-        conn.commit()
-        conn.close()
-        return target_uuid
+    def _insert_ip_lookup(self, target_id, target_ip):
+        """Real IP geolocation orqali core ledger'ni to'ldirish."""
+        try:
+            r = requests.get(f"http://ip-api.com/json/{target_ip}",
+                             params={"fields": "status,country,city,isp,proxy"}, timeout=5)
+            data = r.json()
+            if data.get("status") == "success":
+                conn = sqlite3.connect("osint_root.db")
+                conn.execute(
+                    "INSERT INTO iplocation_data (target_id, ip_address, country, city, isp, vpn_proxy) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (target_id, target_ip, data.get("country"), data.get("city"),
+                     data.get("isp"), str(data.get("proxy", False)))
+                )
+                conn.commit(); conn.close()
+                return data
+        except Exception as e:
+            console.print(f"[yellow][!] IP lookup failed: {e}[/yellow]")
+        return None
 
-    def run_grand_pipeline(self, query, test_image="test.jpg"):
-        """Execute the full 5-module chain under one root id."""
+    def run_grand_pipeline(self, query, image_dir=None):
         self.console.clear()
-                def detect_query_type(query):
-            if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", query):
-                return "email"
-            if re.search(r"\+?\d[\d\s\-\(\)]{7,}", query):
-                return "phone"
-            return "name"
+        query_type = self.detect_query_type(query)
+        console.print(f"[bold cyan][*] Input type:[/bold cyan] [bold yellow]{query_type.upper()}[/bold yellow]")
 
-        query_type = detect_query_type(query)
-        self.console.print(f"[bold cyan][*] Detected Input Type:[/bold cyan] [bold yellow]{query_type.upper()}[/bold yellow]")
-
-        self.console.print(Panel.fit(
-            "[bold cyan]⚡ OMNI-SEARCH INTEGRATED OSINT ECOSYSTEM v1.0 ⚡[/bold cyan]\n"
+        console.print(Panel.fit(
+            "[bold cyan]⚡ OMNI-SEARCH INTEGRATED OSINT ECOSYSTEM v1.1 ⚡[/bold cyan]\n"
             "[bold white]Status: Systems Operational | Mode: Deep Relational Rooting[/bold white]",
             border_style="cyan",
         ))
 
-        session_id = self.create_target_session(query)
-        self.console.print(f"[bold green][+] Rooting active.[/bold green] Root ID: [bold yellow]{session_id}[/bold yellow]\n")
+        session_id = f"OSINT-UUID-{str(uuid.uuid4())[:8].upper()}"
+        conn = sqlite3.connect("osint_root.db")
+        conn.execute("INSERT INTO targets (target_id, input_query) VALUES (?, ?)", (session_id, query))
+        conn.commit(); conn.close()
+        console.print(f"[bold green][+] Rooting active. Root ID: [bold yellow]{session_id}[/bold yellow]\n")
 
-        # Demo seeds — clearly labelled, replace with real lookups later.
-        discovered_aliases = ["cyber_detective", "shadow_coder"]
-        discovered_email = "target_intel_user@gmail.com"
+        # Real lookups — yangi ob'ektlar natijalarini yig'ish uchun
+        discovered_aliases = []
+        discovered_emails = []
 
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=self.console) as progress:
-            # --- PROJECT 1: CORE LEDGER (IP seed) ---
-            task1 = progress.add_task(description="[cyan][P1] Seeding core registries & network layer...[/cyan]", total=None)
-            conn = sqlite3.connect("osint_root.db")
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO iplocation_data (target_id, ip_address, country, city, isp, vpn_proxy) "
-                "VALUES (?, '8.8.8.8', 'United States', 'California', 'Google LLC', 'False')",
-                (session_id,),
-            )
-            conn.commit()
-            conn.close()
-            progress.update(task1, description="[green][P1] Core ledger seeded.[/green]")
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+                      console=self.console) as progress:
 
-            # --- PROJECT 2: SOCIALHUNTER ---
-            task2 = progress.add_task(description="[yellow][P2] Running SocialHunter username audit...[/yellow]", total=None)
-            for alias in discovered_aliases:
-                hunter = SocialHunter(target_id=session_id, username=alias)
+            # P1 — CORE LEDGER
+            t1 = progress.add_task("[cyan][P1] Seeding network layer...", total=None)
+            if query_type == "phone":
+                from phoneintel import PhoneIntel
+                pi = PhoneIntel(target_id=session_id, phone=query)
+                pi.run()
+            elif query_type == "email":
+                discovered_emails.append(query)
+            # Agar domain yoki IP berilsa, lookup qilish mumkin
+            if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", query):
+                self._insert_ip_lookup(session_id, query)
+            progress.update(t1, "[green][P1] Core ledger seeded.[/green]")
+
+            # P2 — SOCIALHUNTER
+            t2 = progress.add_task("[yellow][P2] SocialHunter: username audit...", total=None)
+            if query_type == "name":
+                hunter = SocialHunter(target_id=session_id, username=query)
                 hunter.scan_username()
                 hunter.save_to_database()
-            progress.update(task2, description="[green][P2] Social footprint audit complete.[/green]")
+                if hasattr(hunter, 'results'):
+                    discovered_aliases.append(query)
+            progress.update(t2, "[green][P2] Social footprint audit complete.[/green]")
 
-            # --- PROJECT 3: IMAGETRACKER ---
-            task3 = progress.add_task(description="[magenta][P3] Extracting EXIF metadata...[/magenta]", total=None)
-            if not os.path.exists(test_image):
-                from PIL import Image
-                Image.new("RGB", (100, 100), color="red").save(test_image)
-            img_analyzer = ImageTracker(target_id=session_id, image_path=test_image)
-            img_analyzer.extract_exif()
-            img_analyzer.save_to_database()
-            progress.update(task3, description="[green][P3] EXIF metadata catalogued.[/green]")
+            # P3 — IMAGETRACKER
+            t3 = progress.add_task("[magenta][P3] EXIF metadata extraction...", total=None)
+            if image_dir and Path(image_dir).exists():
+                for img_file in Path(image_dir).rglob("*"):
+                    if img_file.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                        img_tracker = ImageTracker(target_id=session_id, image_path=str(img_file))
+                        img_tracker.extract_exif()
+                        img_tracker.save_to_database()
+            else:
+                console.print("[yellow][!] image_dir berilmagan — ImageTracker skip qilindi.[/yellow]")
+            progress.update(t3, "[green][P3] EXIF metadata catalogued.[/green]")
 
-             # run_grand_pipeline() ichida, query_type == "face" bo'lganda:
-from facetracker import FaceTracker
+            # P4 — CYBERTRACE
+            t4 = progress.add_task("[red][P4] Data-breach audit...", total=None)
+            if discovered_emails:
+                for email in discovered_emails:
+                    cyber = CyberTraceHub(target_id=session_id, target_email=email)
+                    cyber.check_data_breaches()
+                    cyber.save_to_database()
+            else:
+                console.print("[yellow][!] Email topilmadi — breach audit skip qilindi.[/yellow]")
+            progress.update(t4, "[green][P4] Breach audit complete.[/green]")
 
-# detect_query_type() ga qo'shing:
-if os.path.exists(query) and query.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-    return "face"
-
-# P3.5 — FACE TRACKER (imagetracker'dan keyin):
-task35 = progress.add_task(description="[green][P3.5] Face-tracker: yuz mosliklari qidirilmoqda...[/green]", total=None)
-face_engine = FaceTracker(target_id=session_id, query_photo=query, image_dir="./corpus/")
-face_engine.scan()
-progress.update(task35, description="[green][P3.5] Yuz mosliklari bog'landi.[/green]")
-
-            # --- PROJECT 5: CYBERTRACE HUB ---
-            task5 = progress.add_task(description="[red][P5] Auditing data-breach repositories...[/red]", total=None)
-            cyber_audit = CyberTraceHub(target_id=session_id, target_email=discovered_email)
-            cyber_audit.check_data_breaches()
-            cyber_audit.save_to_database()
-            progress.update(task5, description="[green][P5] Breach audit complete.[/green]")
-
-            # --- PROJECT 4: GEOINTEL MAP ---
-            task4 = progress.add_task(description="[blue][P4] Compiling geospatial viewport...[/blue]", total=None)
+            # P5 — GEOINTEL MAP (always last)
+            t5 = progress.add_task("[blue][P5] Compiling geospatial viewport...", total=None)
             map_engine = GeoIntelMap(target_id=session_id)
             map_engine.fetch_coordinates_from_db()
             map_engine.generate_interactive_map()
-            progress.update(task4, description="[green][P4] Map compiled and opened in browser.[/green]")
+            progress.update(t5, "[green][P5] Map saved.[/green]")
 
-        self.console.print(f"\n[bold green]🏁 GRAND PIPELINE SUCCESSFUL FOR {session_id}! All data linked.[/bold green]")
-
+        console.print(f"\n[bold green]🏁 PIPELINE SUCCESSFUL FOR {session_id}![/bold green]")
 
 if __name__ == "__main__":
-    orchestrator = GrandOSINTOrchestrator()
-    console.print("[bold white]Welcome to the Unified Grand OSINT Suite[/bold white]")
-    input_data = console.input("[bold magenta]Enter initial target indicator (Name/Phone/Email): [/bold magenta]")
-    if input_data.strip():
-        orchestrator.run_grand_pipeline(query=input_data)
+    console.print("[bold white]OmniSearch OSINT Ecosystem[/bold white]")
+    query = Prompt.ask("[bold magenta]Enter target indicator (Name/Phone/Email/IP/ImageDir)[/bold magenta]")
+    img_dir = Prompt.ask("[bold magenta]Image directory path (enter to skip)[/bold magenta]", default="")
+    img_dir = img_dir.strip() or None
+    if query.strip():
+        GrandOSINTOrchestrator().run_grand_pipeline(query=query.strip(), image_dir=img_dir)
     else:
-        console.print("[red][!] Error: query parameter is required.[/red]")
-        
+        console.print("[red][!] Query required.[/red]")
+
