@@ -1,17 +1,18 @@
 """OmniSearch Core Ledger — FastPeopleSearch / Whoxy / IPLocation tracking layer."""
 
 import socket
+import sqlite3
 import time
 import requests
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich.prompt import Prompt
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 console = Console()
 
-# FastPeopleSearch and Whoxy require paid access, so those two modules run
-# in DEMO mode with clearly labelled sample records.
+# FastPeopleSearch and Whoxy require paid access — demo mode with sample records.
 DEMO_MODE = True
 
 
@@ -44,7 +45,6 @@ class OmniSearchEngine:
         time.sleep(1.0)
         try:
             ip_address = socket.gethostbyname(domain) if domain else "8.8.8.8"
-            # Note: ip-api.com free tier is HTTP-only (no HTTPS support).
             response = requests.get(
                 f"http://ip-api.com/json/{ip_address}",
                 params={"fields": "status,message,country,regionName,city,lat,lon,isp,as"},
@@ -65,7 +65,7 @@ class OmniSearchEngine:
             else:
                 self.data["iplocation"] = {"ip": ip_address, "error": response.get("message")}
         except Exception as e:
-            self.data["iplocation"] = {"error": str(e)}
+            self.data["iplocation"] = {"ip": "8.8.8.8", "error": str(e)}
 
     def run_whoxy_module(self):
         """Demo reverse-WHOIS lookup (Whoxy is a paid API)."""
@@ -79,6 +79,50 @@ class OmniSearchEngine:
             "reverse_whois_count": "3 other domains mapped to this entity",
             "history_alert": "Hosting provider migrated in 2025",
         }
+
+    def save_to_database(self):
+        """Ledger natijalarini osint_root.db ga yozadi."""
+        conn = sqlite3.connect("osint_root.db")
+        cur = conn.cursor()
+
+        fps = self.data["fastpeoplesearch"]
+        if fps:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS fastpeoplesearch_data (
+                target_id TEXT, full_name TEXT, age TEXT, current_phone TEXT,
+                current_address TEXT, aliases TEXT, relatives TEXT
+            )""")
+            cur.execute(
+                "INSERT INTO fastpeoplesearch_data VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (self.root_id, fps.get("full_name"), fps.get("age"),
+                 fps.get("current_phone"), fps.get("current_address"),
+                 ", ".join(fps.get("aliases", [])), ", ".join(fps.get("relatives", []))),
+            )
+
+        wx = self.data["whoxy"]
+        if wx:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS whoxy_data (
+                target_id TEXT, owned_domain TEXT, registrar TEXT, registrant_email TEXT
+            )""")
+            cur.execute("INSERT INTO whoxy_data VALUES (?, ?, ?, ?)",
+                        (self.root_id, wx.get("owned_domain"), wx.get("registrar"),
+                         wx.get("registrant_email")))
+
+        ip = self.data["iplocation"]
+        if "ip" in ip:
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS iplocation_data (
+                target_id TEXT, ip_address TEXT, country TEXT, city TEXT,
+                isp TEXT, vpn_proxy TEXT
+            )""")
+            cur.execute("INSERT INTO iplocation_data VALUES (?, ?, ?, ?, ?, ?)",
+                        (self.root_id, ip.get("ip"), ip.get("country"), ip.get("city"),
+                         ip.get("isp"), ip.get("vpn_proxy")))
+
+        conn.commit()
+        conn.close()
+        console.print("[bold green][+] Ledger saved to osint_root.db[/bold green]")
 
     def display_results(self):
         """Render the consolidated dossier."""
@@ -132,8 +176,8 @@ class OmniSearchEngine:
 
 
 if __name__ == "__main__":
-    console.print("[bold cyan]OmniSearch OSINT Terminal Engine v1.0[/bold cyan]")
-    target_input = console.input("[bold white]Enter target indicator (Name/Phone/Email): [/bold white]")
+    console.print("[bold cyan]OmniSearch OSINT Terminal Engine v1.1[/bold cyan]")
+    target_input = Prompt.ask("[bold white]Enter target indicator (Name/Phone/Email): [/bold white]")
 
     engine = OmniSearchEngine(target_input)
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
@@ -150,5 +194,5 @@ if __name__ == "__main__":
         engine.run_iplocation_module(detected_domain)
         progress.update(task3, description="[green]Network and geolocation analysis complete.[/green]")
 
+    engine.save_to_database()
     engine.display_results()
-    
