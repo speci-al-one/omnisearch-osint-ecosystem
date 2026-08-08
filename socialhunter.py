@@ -8,14 +8,9 @@ console = Console()
 
 
 class SocialHunter:
-    # socialhunter.py da:
-def get_results(self):
-    """Topilgan platformalarni qaytaradi."""
-    return self.results
     def __init__(self, target_id, username):
         self.target_id = target_id
         self.username = username
-        # NOTE: "/" before {username} is required for a valid profile URL
         self.platforms = {
             "GitHub": f"https://github.com/{username}",
             "Instagram": f"https://instagram.com/{username}",
@@ -43,13 +38,20 @@ def get_results(self):
         for platform_name, url in self.platforms.items():
             try:
                 response = requests.get(url, headers=headers, timeout=5)
-                if response.status_code == 200:
+                # 200 = topildi; 404/410 = yo'q; boshqa kodlar (403, 302) — shubhali
+                if response.status_code == 200 and len(response.history) == 0:
                     self.found_profiles.append((platform_name, url))
                     console.print(f"[bold green][+] Found:[/bold green] {platform_name} -> {url}")
-                else:
+                elif response.status_code in (404, 410):
                     console.print(f"[red][-] Not found:[/red] {platform_name}")
+                else:
+                    console.print(f"[yellow][~] Uncertain ({response.status_code}):[/yellow] {platform_name}")
             except requests.RequestException as e:
                 console.print(f"[yellow][!] Error scanning {platform_name}: {e}[/yellow]")
+
+    def get_results(self):
+        """Topilgan platformalarni qaytaradi (orchestrator uchun)."""
+        return dict(self.found_profiles)
 
     def save_to_database(self):
         """Store discovered profiles in the central database."""
