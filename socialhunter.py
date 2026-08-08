@@ -8,6 +8,10 @@ console = Console()
 
 
 class SocialHunter:
+    # socialhunter.py da:
+def get_results(self):
+    """Topilgan platformalarni qaytaradi."""
+    return self.results
     def __init__(self, target_id, username):
         self.target_id = target_id
         self.username = username
