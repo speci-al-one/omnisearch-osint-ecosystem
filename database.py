@@ -66,5 +66,12 @@ def init_db():
         target_id TEXT, leak_source TEXT, breach_date TEXT, exposed_data TEXT
     )""")
 
+    # 8. Phone intelligence data (numverify)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS phone_intel_data (
+        target_id TEXT, phone TEXT, valid TEXT, country TEXT,
+        location TEXT, carrier TEXT, line_type TEXT
+    )""")
+
     conn.commit()
     conn.close()
