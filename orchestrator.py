@@ -27,26 +27,23 @@ class GrandOSINTOrchestrator:
     @staticmethod
     def detect_query_type(query):
         """Email / Phone / IP / Rasm / Name turlarini aniqlaydi."""
+        if os.path.isfile(query) and query.lower().endswith(
+            (".jpg", ".jpeg", ".png", ".webp", ".bmp")):
+            return "image"
         if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", query):
             return "email"
         if re.search(r"\+?\d[\d\s\-\(\)]{7,}", query):
             return "phone"
         if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", query):
             return "ip"
-        if query.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp")):
-            return "image"
         return "name"
 
     def _save_phone_intel(self, target_id, result):
         """PhoneIntel natijasini bazaga yozadi."""
         conn = sqlite3.connect("osint_root.db")
         conn.execute("""
-        CREATE TABLE IF NOT EXISTS phone_intel_data (
-            target_id TEXT, phone TEXT, valid TEXT, country TEXT,
-            location TEXT, carrier TEXT, line_type TEXT
-        )""")
-        conn.execute(
-            "INSERT INTO phone_intel_data VALUES (?, ?, ?, ?, ?, ?, ?)",
+        INSERT INTO phone_intel_data (target_id, phone, valid, country, location, carrier, line_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (target_id, result.get("phone"), str(result.get("valid", "")),
              result.get("country", ""), result.get("location", ""),
              result.get("carrier", ""), result.get("line_type", "")),
@@ -54,7 +51,7 @@ class GrandOSINTOrchestrator:
         conn.commit()
         conn.close()
 
-    def run_grand_pipeline(self, query, image_dir=None):
+    def run_grand_pipeline(self, query, image_dir=None, face_corpus=None):
         """Execute the full module chain under one root id."""
         self.console.clear()
         query_type = self.detect_query_type(query)
@@ -62,7 +59,7 @@ class GrandOSINTOrchestrator:
                            f"[bold yellow]{query_type.upper()}[/bold yellow]")
 
         self.console.print(Panel.fit(
-            "[bold cyan]⚡ OMNI-SEARCH INTEGRATED OSINT ECOSYSTEM v1.1 ⚡[/bold cyan]\n"
+            "[bold cyan]⚡ OMNI-SEARCH INTEGRATED OSINT ECOSYSTEM v2.0 ⚡[/bold cyan]\n"
             "[bold white]Status: Systems Operational | Mode: Deep Relational Rooting[/bold white]",
             border_style="cyan",
         ))
@@ -77,19 +74,19 @@ class GrandOSINTOrchestrator:
                            f"Root ID: [bold yellow]{session_id}[/bold yellow]\n")
 
         discovered_emails = []
+        discovered_usernames = []
 
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
                       console=self.console) as progress:
 
             # --- P1: PHONE / IP LEDGER ---
-            task1 = progress.add_task(description="[cyan][P1] Seeding core registries...[/cyan]", total=None)
+            task1 = progress.add_task("[cyan][P1] Seeding core registries...[/cyan]", total=None)
             if query_type == "phone":
                 from phoneintel import PhoneIntel
-                result = PhoneIntel(query).query()
+                pi = PhoneIntel(query, target_id=session_id)
+                result = pi.query()
                 self._save_phone_intel(session_id, result)
-                self.console.print(f"[bold green][+] PhoneIntel:[/bold green] {result.get('phone')} "
-                                   f"| valid={result.get('valid', '?')} | "
-                                   f"carrier={result.get('carrier', '?')}")
+                pi.display()
             elif query_type == "ip":
                 try:
                     r = requests.get(f"http://ip-api.com/json/{query}",
@@ -98,33 +95,57 @@ class GrandOSINTOrchestrator:
                     if data.get("status") == "success":
                         conn = sqlite3.connect("osint_root.db")
                         conn.execute(
-                            "INSERT INTO iplocation_data (target_id, ip_address, country, city, isp, vpn_proxy) "
+                            "INSERT INTO iplocation_data "
+                            "(target_id, ip_address, country, city, isp, vpn_proxy) "
                             "VALUES (?, ?, ?, ?, ?, ?)",
                             (session_id, query, data.get("country"), data.get("city"),
                              data.get("isp"), str(data.get("proxy", False))))
                         conn.commit()
                         conn.close()
-                        self.console.print(f"[bold green][+] IP lookup:[/bold green] {query} "
-                                           f"-> {data.get('city')}, {data.get('country')}")
                 except Exception as e:
                     self.console.print(f"[yellow][!] IP lookup failed: {e}[/yellow]")
             else:
                 self.console.print("[dim][-] P1: phone/IP emas, skip.[/dim]")
-            progress.update(task1, description="[green][P1] Core ledger seeded.[/green]")
+            progress.update(task1, "[green][P1] Core ledger seeded.[/green]")
 
-            # --- P2: SOCIALHUNTER (name yoki email username qismi) ---
-            task2 = progress.add_task(description="[yellow][P2] Running SocialHunter username audit...[/yellow]", total=None)
-            search_username = query if query_type == "name" else None
-            if search_username:
-                hunter = SocialHunter(target_id=session_id, username=search_username)
+            # --- P2: SOCIALHUNTER ---
+            task2 = progress.add_task("[yellow][P2] SocialHunter username audit...[/yellow]", total=None)
+            if query_type == "name":
+                hunter = SocialHunter(target_id=session_id, username=query)
+                hunter.scan_username()
+                hunter.save_to_database()
+                found = hunter.get_results()
+                discovered_usernames = list(found.keys())
+            elif query_type == "email":
+                discovered_emails.append(query)
+                local_part = query.split("@")[0]
+                hunter = SocialHunter(target_id=session_id, username=local_part)
                 hunter.scan_username()
                 hunter.save_to_database()
             else:
                 self.console.print("[dim][-] P2: username emas, skip.[/dim]")
-            progress.update(task2, description="[green][P2] Social footprint audit complete.[/green]")
+            progress.update(task2, "[green][P2] Social footprint audit complete.[/green]")
 
-            # --- P3: IMAGETRACKER (berilgan papka bo'yicha) ---
-            task3 = progress.add_task(description="[magenta][P3] Extracting EXIF metadata...[/magenta]", total=None)
+            # --- P2.1: FACE TRACKER (agar so'rov rasm bo'lsa va korpus berilgan bo'lsa) ---
+            task_face = progress.add_task(
+                "[green][P2.1] FaceTracker: yuz qidiruv...[/green]", total=None)
+            if query_type == "image" and face_corpus and os.path.isdir(face_corpus):
+                from facetracker import FaceTracker
+                ft = FaceTracker(
+                    target_id=session_id,
+                    query_photo=query,
+                    image_dir=face_corpus,
+                )
+                ft.scan()
+            else:
+                if query_type == "image" and not face_corpus:
+                    self.console.print("[yellow][!] face_corpus berilmagan — FaceTracker skip.[/yellow]")
+                else:
+                    self.console.print("[dim][-] P2.1: rasm emas, skip.[/dim]")
+            progress.update(task_face, "[green][P2.1] FaceTracker complete.[/green]")
+
+            # --- P3: IMAGETRACKER (EXIF) ---
+            task3 = progress.add_task("[magenta][P3] Extracting EXIF metadata...[/magenta]", total=None)
             if image_dir and os.path.isdir(image_dir):
                 exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"}
                 images = [p for p in os.listdir(image_dir)
@@ -135,11 +156,11 @@ class GrandOSINTOrchestrator:
                     tracker.extract_exif()
                     tracker.save_to_database()
             else:
-                self.console.print("[yellow][!] P3: image_dir berilmagan — EXIF qadami skip.[/yellow]")
-            progress.update(task3, description="[green][P3] EXIF metadata catalogued.[/green]")
+                self.console.print("[yellow][!] P3: image_dir berilmagan — EXIF skip.[/yellow]")
+            progress.update(task3, "[green][P3] EXIF metadata catalogued.[/green]")
 
-            # --- P4: CYBERTRACE (email bo'lsa) ---
-            task4 = progress.add_task(description="[red][P4] Auditing data-breach repositories...[/red]", total=None)
+            # --- P4: CYBERTRACE ---
+            task4 = progress.add_task("[red][P4] Data-breach audit...[/red]", total=None)
             if query_type == "email":
                 discovered_emails.append(query)
             if discovered_emails:
@@ -149,28 +170,29 @@ class GrandOSINTOrchestrator:
                     cyber.save_to_database()
             else:
                 self.console.print("[yellow][!] P4: email topilmadi — breach audit skip.[/yellow]")
-            progress.update(task4, description="[green][P4] Breach audit complete.[/green]")
+            progress.update(task4, "[green][P4] Breach audit complete.[/green]")
 
-            # --- P5: GEOINTEL MAP (har doim oxirgi) ---
-            task5 = progress.add_task(description="[blue][P5] Compiling geospatial viewport...[/blue]", total=None)
+            # --- P5: GEOINTEL MAP ---
+            task5 = progress.add_task("[blue][P5] Compiling geospatial viewport...[/blue]", total=None)
             map_engine = GeoIntelMap(target_id=session_id)
             map_engine.fetch_coordinates_from_db()
             map_engine.generate_interactive_map()
-            progress.update(task5, description="[green][P5] Map compiled.[/green]")
+            progress.update(task5, "[green][P5] Map compiled.[/green]")
 
         self.console.print(f"\n[bold green]🏁 GRAND PIPELINE SUCCESSFUL FOR {session_id}! "
                            f"All data linked.[/bold green]")
 
 
 if __name__ == "__main__":
-    console.print("[bold white]Welcome to the Unified Grand OSINT Suite[/bold white]")
-    input_data = Prompt.ask("[bold magenta]Enter target indicator (Name/Phone/Email/IP)[/bold magenta]")
-    img_dir = Prompt.ask("[bold magenta]Image directory (Enter = skip)[/bold magenta]", default="").strip()
-    if input_data.strip():
+    console.print("[bold white]OmniSearch OSINT Ecosystem v2.0[/bold white]")
+    query = Prompt.ask("[bold magenta]Target indicator (Name/Phone/Email/IP/PhotoPath)[/bold magenta]")
+    img_dir = Prompt.ask("[bold magenta]Image directory for EXIF (Enter=skip)[/bold magenta]", default="").strip()
+    face_corpus = Prompt.ask("[bold magenta]Face corpus directory (Enter=skip)[/bold magenta]", default="").strip()
+    if query.strip():
         GrandOSINTOrchestrator().run_grand_pipeline(
-            query=input_data.strip(),
+            query=query.strip(),
             image_dir=img_dir or None,
+            face_corpus=face_corpus or None,
         )
     else:
-        console.print("[red][!] Error: query parameter is required.[/red]")
-
+        console.print("[red][!] Query required.[/red]")
